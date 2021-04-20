@@ -4,9 +4,8 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
+	"os"	
 	"strings"
-	
 )
 
 func check(e error) {
@@ -15,7 +14,11 @@ func check(e error) {
     }
 }
 
-func wordCounter() {
+func wordCounter( n int , words []string ) {
+	m := make( map[string]int )
+
+	for _ , v := range(words) { m[v]++ }
+	for k , v := range(m) { fmt.Println(k , ":" ,  v) }
 
 }
 
@@ -35,6 +38,38 @@ func main() {
 	data , err := ioutil.ReadFile("./test.txt")
 	check(err)
 
-	dataIn := string( data )
-	fmt.Print( strings.ToLower(dataIn) )
+	dataIn := strings.ToLower( string( data ) )
+	var words []string
+
+	var i  , j , n = 0 , 0 , len(dataIn)
+	for ; i < n ; {
+		switch dataIn[i] {
+			case ' ' :
+				// First Char Whitespace
+				if i == 0 { 
+					i++
+					j++ 
+
+				// Word then Whitespace
+				} else if dataIn[i-1] != ' ' { 
+					words = append( words , dataIn[j:i] )
+					i++
+					j = i
+
+				// Whitespace then Whitespace
+				} else if dataIn[i-1] == ' ' { i++ }
+
+			// Current Not a Whitespace
+			default  :
+				if i == n-1 { words = append( words , dataIn[j:i+1] ) }
+				i++
+		}
+	}
+
+	// Dividing work & Counting Freqs
+	for i := 0 ; i < 4 ; i++ { 
+		wordCounter( len(words) / 5 , words[ i * (len(words) / 5) : (i+1) * (len(words) / 5) ] )
+	}
+	
+	wordCounter( len(words) / 5 + len(words) % 5 , words[ 4 * (len(words) / 5) : ] )
 }
