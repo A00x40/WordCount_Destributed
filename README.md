@@ -3,8 +3,7 @@
 - Input: a file containing English text , as in “ExampleIn.txt”
 - Output: a  file  containing  each  unique  word  and  its  associated  count  as  appeared  in  the  input  text . The  output  file format should follow the “ExampleOut.txt” provided. “ExampleOut.txt”.
 
-InputFileName test.txt
-OutputFileNamr WordCountOutput.txt
+InputFileName: test.txt , OutputFileName: WordCountOutput.txt
 
 - Method: First Convert Input to lower case so the output follows “ExampleOut.txt” format.
 The input file should be divided evenly among 5 go routines, each routine computes the word counts for the portion of  the  file  it  is  responsible  for.  
