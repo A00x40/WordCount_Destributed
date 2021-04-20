@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"	
 	"strings"
+	"sort"
 )
 
 func check(e error) {
@@ -14,12 +15,13 @@ func check(e error) {
     }
 }
 
-func wordCounter( n int , words []string ) {
+
+func wordCounter( n int , words []string ) (map[string]int){
 	m := make( map[string]int )
 
 	for _ , v := range(words) { m[v]++ }
-	for k , v := range(m) { fmt.Println(k , ":" ,  v) }
-
+	// for k , v := range(m) { fmt.Println(k , ":" ,  v) }
+	return m
 }
 
 func reducer()  {
@@ -37,39 +39,40 @@ func main() {
 	// DataIn Reading
 	data , err := ioutil.ReadFile("./test.txt")
 	check(err)
-
+	
 	dataIn := strings.ToLower( string( data ) )
 	var words []string
-
-	var i  , j , n = 0 , 0 , len(dataIn)
-	for ; i < n ; {
-		switch dataIn[i] {
-			case ' ' :
-				// First Char Whitespace
-				if i == 0 { 
-					i++
-					j++ 
-
-				// Word then Whitespace
-				} else if dataIn[i-1] != ' ' { 
-					words = append( words , dataIn[j:i] )
-					i++
-					j = i
-
-				// Whitespace then Whitespace
-				} else if dataIn[i-1] == ' ' { i++ }
-
-			// Current Not a Whitespace
-			default  :
-				if i == n-1 { words = append( words , dataIn[j:i+1] ) }
-				i++
-		}
-	}
-
-	// Dividing work & Counting Freqs
-	for i := 0 ; i < 4 ; i++ { 
-		wordCounter( len(words) / 5 , words[ i * (len(words) / 5) : (i+1) * (len(words) / 5) ] )
+	
+	var lines []string = strings.Split(dataIn, "\n")
+	for _, line := range(lines) {
+		line = strings.Trim(line, "\n\r")
+		
+		words = append(words, strings.Split(line, " ")...)
 	}
 	
-	wordCounter( len(words) / 5 + len(words) % 5 , words[ 4 * (len(words) / 5) : ] )
+	
+	m := wordCounter(len(words), words)
+
+	
+	// Create output file
+	f, err := os.Create("WordOutput.txt")
+	defer f.Close()
+	
+	// Struct of pair (key, value)
+	type kv struct {
+		Key   string
+        Value int
+    }
+
+	// Create slice of key-value pairs of map items to sort it
+    var ss []kv
+    for k, v := range m {
+		ss = append(ss, kv{k, v})
+    }
+    sort.Slice(ss, func(i, j int) bool {
+		return ss[i].Value > ss[j].Value || ss[i].Value == ss[j].Value && ss[i].Key < ss[j].Key
+    })
+
+	// Write to file
+	for _ , v := range(ss) { fmt.Fprintln(f, v.Key, ":" ,  v.Value) }
 }
