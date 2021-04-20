@@ -14,15 +14,17 @@ func check(e error) {
     }
 }
 
-func wordCounter( n int , words []string ) {
+func wordCounter( words []string ) {
 	m := make( map[string]int )
 
-	for _ , v := range(words) { m[v]++ }
-	for k , v := range(m) { fmt.Println(k , ":" ,  v) }
-
+	// TODO Add Channel & make it send the map to reducer after counting
+	for _ , w := range(words) { m[w]++ }
 }
 
 func reducer()  {
+
+	// TODO Receive from wordCounter and merge maps to sharedMap
+	// Sort SharedMap & Write to OutFile
 
 }
 
@@ -58,18 +60,33 @@ func main() {
 
 				// Whitespace then Whitespace
 				} else if dataIn[i-1] == ' ' { i++ }
-
+		
 			// Current Not a Whitespace
 			default  :
-				if i == n-1 { words = append( words , dataIn[j:i+1] ) }
-				i++
+				if i == n-1 { 
+					words = append( words , dataIn[j:i+1] ) 
+					i++
+				} else if dataIn[i] == '\n' {
+					words = append( words , dataIn[j:i] )
+					i++
+					j = i
+				} else { i++ }
 		}
 	}
+		
+	// Array of Channels to be Used
+	var ch [5] chan map[string]int
+	for i := 0 ; i < 5 ; i++ { ch[i] = make(chan map[string]int) }
 
 	// Dividing work & Counting Freqs
-	for i := 0 ; i < 4 ; i++ { 
-		wordCounter( len(words) / 5 , words[ i * (len(words) / 5) : (i+1) * (len(words) / 5) ] )
-	}
-	
-	wordCounter( len(words) / 5 + len(words) % 5 , words[ 4 * (len(words) / 5) : ] )
+
+	// Note Main Function Completes before go routine
+	// Use Sync WaitGroup to wait for go routine 
+
+	// You won't be able to see prints inside (go wordCounter) so remove go for testing
+	go wordCounter( words[ 0 : (len(words) / 5) ]    )
+	go wordCounter( words[ (len(words) / 5)     : 2 * (len(words) / 5) ] )
+	go wordCounter( words[ 2 * (len(words) / 5) : 3 * (len(words) / 5) ] )
+	go wordCounter( words[ 3 * (len(words) / 5) : 4 * (len(words) / 5) ] )
+	go wordCounter( words[ 4 * (len(words) / 5) : ]  )	
 }
