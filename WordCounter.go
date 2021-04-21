@@ -32,8 +32,33 @@ func wordCounter(s *sharedMap, words []string, i int ) {
 	}
 }
 
-func reducer()  {
+func reducer(s *sharedMap)  {
+	// wait for goroutines to finish
+	s.wg.Wait()
 
+	// Create output file
+	f, err := os.Create("WordCountOutput.txt")
+	check(err)
+	defer f.Close()
+	
+	// Struct of pair (key, value)
+	type kv struct {
+		Key   string
+        Value int
+    }
+
+	// Create slice of key-value pairs of map items to sort it
+    var ss []kv
+    for k, v := range s.ma {
+		ss = append(ss, kv{k, v})
+    }
+
+    sort.Slice(ss, func(i, j int) bool {
+		return ss[i].Value > ss[j].Value || ss[i].Value == ss[j].Value && ss[i].Key < ss[j].Key
+    })
+
+	// Write to file
+	for _ , v := range(ss) { fmt.Fprintln(f, v.Key, ":" ,  v.Value) }
 }
 
 func main() {
@@ -72,28 +97,5 @@ func main() {
 	go wordCounter(&s, words[3*mult:4*mult],4)
 	go wordCounter(&s, words[4*mult:],5)
 
-	// wait for goroutines to finish
-	s.wg.Wait()
-
-	// Create output file
-	f, err := os.Create("WordOutput.txt")
-	defer f.Close()
-	
-	// Struct of pair (key, value)
-	type kv struct {
-		Key   string
-        Value int
-    }
-
-	// Create slice of key-value pairs of map items to sort it
-    var ss []kv
-    for k, v := range s.ma {
-		ss = append(ss, kv{k, v})
-    }
-    sort.Slice(ss, func(i, j int) bool {
-		return ss[i].Value > ss[j].Value || ss[i].Value == ss[j].Value && ss[i].Key < ss[j].Key
-    })
-
-	// Write to file
-	for _ , v := range(ss) { fmt.Fprintln(f, v.Key, ":" ,  v.Value) }
+	reducer(&s)
 }
