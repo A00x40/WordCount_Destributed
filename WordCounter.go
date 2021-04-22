@@ -4,9 +4,23 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"os"	
+	"os"
 	"strings"
+	"sync"
+	"sort"
 )
+
+type sharedMap struct {
+	mp map[string] int
+	mu sync.Mutex
+	wg sync.WaitGroup
+}
+
+func ( smap *sharedMap ) Inc( key string , value int ) {
+	smap.mu.Lock()
+	defer smap.mu.Unlock()
+	smap.mp[key] += value
+}
 
 func check(e error) {
     if e != nil {
@@ -14,18 +28,49 @@ func check(e error) {
     }
 }
 
-func wordCounter( words []string ) {
-	m := make( map[string]int )
-
-	// TODO Add Channel & make it send the map to reducer after counting
-	for _ , w := range(words) { m[w]++ }
+func wordCounter( words []string , c chan map[string]int ) {
+	mp := make(map[string]int)
+	for _ , w := range(words) { mp[w]++ }
+	c <- mp
+	close(c)
 }
 
-func reducer()  {
+func reducer( smap *sharedMap , in [5] chan map[string]int )  {
 
-	// TODO Receive from wordCounter and merge maps to sharedMap
-	// Sort SharedMap & Write to OutFile
+	f , err := os.OpenFile("./WordCountOutput.txt" , os.O_RDWR | os.O_TRUNC , 0755 )
+	check( err )
+	defer f.Close()
 
+	for i := 0 ; i < 5 ; i++ {
+		smap.wg.Add(1)
+		go func(in chan map[string]int) {
+			defer smap.wg.Done()
+			for mp := range(in)  {
+				for k , v := range(mp) { smap.Inc(k ,v) }
+			}
+
+		} (in[i])
+	}
+	smap.wg.Wait()
+	
+	// Struct of pair (key, value)
+	type kv struct {
+		Key   string
+        Value int
+    }
+
+	// Create slice of key-value pairs of map items to sort it
+    var ss []kv
+    for k, v := range smap.mp {
+		ss = append(ss, kv{k, v})
+    }
+
+    sort.Slice(ss, func(i, j int) bool {
+		return ss[i].Value > ss[j].Value || ss[i].Value == ss[j].Value && ss[i].Key < ss[j].Key
+    })
+
+	// Write to file
+	for _ , v := range(ss) { fmt.Fprintln(f, v.Key, ":" ,  v.Value) }
 }
 
 func main() {
@@ -74,19 +119,23 @@ func main() {
 		}
 	}
 		
-	// Array of Channels to be Used
 	var ch [5] chan map[string]int
 	for i := 0 ; i < 5 ; i++ { ch[i] = make(chan map[string]int) }
 
 	// Dividing work & Counting Freqs
+	go wordCounter( words[ 0 : (len(words) / 5) ] , ch[0] )
+	go wordCounter( words[ (len(words) / 5)     : 2 * (len(words) / 5) ] , ch[1] )
+	go wordCounter( words[ 2 * (len(words) / 5) : 3 * (len(words) / 5) ] , ch[2] )
+	go wordCounter( words[ 3 * (len(words) / 5) : 4 * (len(words) / 5) ] , ch[3] )
+	go wordCounter( words[ 4 * (len(words) / 5) : ] , ch[4] )
 
-	// Note Main Function Completes before go routine
-	// Use Sync WaitGroup to wait for go routine 
+	smap := sharedMap{ mp : map[string]int{} }
 
-	// You won't be able to see prints inside (go wordCounter) so remove go for testing
-	go wordCounter( words[ 0 : (len(words) / 5) ]    )
-	go wordCounter( words[ (len(words) / 5)     : 2 * (len(words) / 5) ] )
-	go wordCounter( words[ 2 * (len(words) / 5) : 3 * (len(words) / 5) ] )
-	go wordCounter( words[ 3 * (len(words) / 5) : 4 * (len(words) / 5) ] )
-	go wordCounter( words[ 4 * (len(words) / 5) : ]  )	
+	// Check If Output File exists and create it if not
+	if _ , err := os.Stat("./WordCountOutput.txt"); os.IsNotExist(err) {
+		_ , err := os.Create("./WordCountOutput.txt")
+		check( err )	
+	} 
+
+	reducer( &smap , ch )
 }
