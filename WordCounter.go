@@ -6,20 +6,14 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"sync"
 	"sort"
+	"sync"
 )
 
 type sharedMap struct {
-	mp map[string] int
 	mu sync.Mutex
+	ma map[string]int
 	wg sync.WaitGroup
-}
-
-func ( smap *sharedMap ) Inc( key string , value int ) {
-	smap.mu.Lock()
-	defer smap.mu.Unlock()
-	smap.mp[key] += value
 }
 
 func check(e error) {
@@ -28,30 +22,24 @@ func check(e error) {
     }
 }
 
-func wordCounter( words []string , c chan map[string]int ) {
-	mp := make(map[string]int)
-	for _ , w := range(words) { mp[w]++ }
-	c <- mp
-	close(c)
+
+func wordCounter(s *sharedMap, words []string, i int ) {
+	defer s.wg.Done()
+	for _ , v := range(words) { 
+		s.mu.Lock()
+		s.ma[v]++ 
+		s.mu.Unlock()
+	}
 }
 
-func reducer( smap *sharedMap , in [5] chan map[string]int )  {
+func reducer(s *sharedMap)  {
+	// wait for goroutines to finish
+	s.wg.Wait()
 
-	f , err := os.OpenFile("./WordCountOutput.txt" , os.O_RDWR | os.O_TRUNC , 0755 )
-	check( err )
+	// Create output file
+	f, err := os.Create("WordCountOutput.txt")
+	check(err)
 	defer f.Close()
-
-	for i := 0 ; i < 5 ; i++ {
-		smap.wg.Add(1)
-		go func(in chan map[string]int) {
-			defer smap.wg.Done()
-			for mp := range(in)  {
-				for k , v := range(mp) { smap.Inc(k ,v) }
-			}
-
-		} (in[i])
-	}
-	smap.wg.Wait()
 	
 	// Struct of pair (key, value)
 	type kv struct {
@@ -61,7 +49,7 @@ func reducer( smap *sharedMap , in [5] chan map[string]int )  {
 
 	// Create slice of key-value pairs of map items to sort it
     var ss []kv
-    for k, v := range smap.mp {
+    for k, v := range s.ma {
 		ss = append(ss, kv{k, v})
     }
 
@@ -84,58 +72,30 @@ func main() {
 	// DataIn Reading
 	data , err := ioutil.ReadFile("./test.txt")
 	check(err)
-
+	
 	dataIn := strings.ToLower( string( data ) )
 	var words []string
-
-	var i  , j , n = 0 , 0 , len(dataIn)
-	for ; i < n ; {
-		switch dataIn[i] {
-			case ' ' :
-				// First Char Whitespace
-				if i == 0 { 
-					i++
-					j++ 
-
-				// Word then Whitespace
-				} else if dataIn[i-1] != ' ' { 
-					words = append( words , dataIn[j:i] )
-					i++
-					j = i
-
-				// Whitespace then Whitespace
-				} else if dataIn[i-1] == ' ' { i++ }
-		
-			// Current Not a Whitespace
-			default  :
-				if i == n-1 { 
-					words = append( words , dataIn[j:i+1] ) 
-					i++
-				} else if dataIn[i] == '\n' {
-					words = append( words , dataIn[j:i] )
-					i++
-					j = i
-				} else { i++ }
-		}
+	
+	// Split the string to lines
+	var lines []string = strings.Split(dataIn, "\n")
+	
+	// Splite the lines to words
+	for _, line := range(lines) {
+		line = strings.Trim(line, "\n\r")
+		words = append(words, strings.Split(line, " ")...)
 	}
-		
-	var ch [5] chan map[string]int
-	for i := 0 ; i < 5 ; i++ { ch[i] = make(chan map[string]int) }
+	
+	s := sharedMap {ma: make(map[string]int)}
+	
+	// wait group to wait for all goroutines
+	s.wg.Add(5)
 
-	// Dividing work & Counting Freqs
-	go wordCounter( words[ 0 : (len(words) / 5) ] , ch[0] )
-	go wordCounter( words[ (len(words) / 5)     : 2 * (len(words) / 5) ] , ch[1] )
-	go wordCounter( words[ 2 * (len(words) / 5) : 3 * (len(words) / 5) ] , ch[2] )
-	go wordCounter( words[ 3 * (len(words) / 5) : 4 * (len(words) / 5) ] , ch[3] )
-	go wordCounter( words[ 4 * (len(words) / 5) : ] , ch[4] )
+	mult := len(words) / 5
+	go wordCounter(&s, words[:mult],1)
+	go wordCounter(&s, words[mult:2*mult],2)
+	go wordCounter(&s, words[2*mult:3*mult],3)
+	go wordCounter(&s, words[3*mult:4*mult],4)
+	go wordCounter(&s, words[4*mult:],5)
 
-	smap := sharedMap{ mp : map[string]int{} }
-
-	// Check If Output File exists and create it if not
-	if _ , err := os.Stat("./WordCountOutput.txt"); os.IsNotExist(err) {
-		_ , err := os.Create("./WordCountOutput.txt")
-		check( err )	
-	} 
-
-	reducer( &smap , ch )
+	reducer(&s)
 }
